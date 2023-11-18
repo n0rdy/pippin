@@ -1,7 +1,6 @@
 package pipeline
 
 import (
-	"github.com/n0rdy/pippin/types"
 	"github.com/n0rdy/pippin/types/statuses"
 	"testing"
 )
@@ -45,14 +44,20 @@ func TestFromMap_Success(t *testing.T) {
 		t.Errorf("Expected status %s, got %s", statuses.Status(statuses.Running).String(), p.Status.String())
 	}
 
-	for k, v := range m {
-		eFromChan := <-p.InitStage.Chan
-		if eFromChan.First != k || eFromChan.Second != v {
-			t.Errorf("Expected element %d, got %d", types.Tuple[int, int]{
-				First:  k,
-				Second: v,
-			}, eFromChan)
+	i := 0
+	for eFromChan := range p.InitStage.Chan {
+		if v, ok := m[eFromChan.First]; ok {
+			if v != eFromChan.Second {
+				t.Errorf("Expected element %d, got %d", v, eFromChan)
+			}
+		} else {
+			t.Errorf("Expected element %d, got %d", v, eFromChan)
 		}
+		i++
+	}
+
+	if i != len(m) {
+		t.Errorf("Expected %d elements, got %d", len(m), i)
 	}
 
 	if p.rateLimiter != nil {
