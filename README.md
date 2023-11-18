@@ -8,6 +8,7 @@ Basically, this is the main purpose why I implemented this library in the first 
 It has no external dependencies except for the two Go standard library experimental packages:
 - `golang.org/x/exp`
 - `golang.org/x/sync`
+
 and one external dependency for testing goroutine leaks:
 - `go.uber.org/goleak`
 
