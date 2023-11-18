@@ -46,7 +46,7 @@ go get github.com/n0rdy/pippin
 ### Simple example
 
 ```go
-// create a new pipeline from a slice of integers:
+// creates a new pipeline from a slice of integers:
 p := pipeline.FromSlice[int]([]int{1, 2, 3, 4, 5})
 
 // filters out all even numbers:
@@ -74,7 +74,7 @@ if err != nil {
 ### More detailed example
 
 ```go
-// create a new pipeline from a slice of integers:
+// creates a new pipeline from a slice of integers:
 p := pipeline.FromSlice(
 	[]string{"1", "a", "2", "-3", "4", "5", "b"},
 )
