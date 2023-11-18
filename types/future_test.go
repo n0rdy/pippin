@@ -1,6 +1,9 @@
 package types
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestFuture_Success_Get(t *testing.T) {
 	future := NewFuture[int]()
@@ -33,7 +36,7 @@ func TestFuture_Success_GetWithTimeout(t *testing.T) {
 		t.Error("Future should be completed")
 	}
 
-	result, err := future.GetWithTimeout(1000)
+	result, err := future.GetWithTimeout(time.Duration(1000) * time.Millisecond)
 	if err != nil {
 		t.Error("Expected no error, got: ", err)
 	}
@@ -48,7 +51,7 @@ func TestFuture_Failure_GetWithTimeout(t *testing.T) {
 		t.Error("Future should not be completed")
 	}
 
-	result, err := future.GetWithTimeout(1000)
+	result, err := future.GetWithTimeout(time.Duration(1000) * time.Millisecond)
 	if err == nil {
 		t.Error("Expected error, got: ", err)
 	}
@@ -58,7 +61,7 @@ func TestFuture_Failure_GetWithTimeout(t *testing.T) {
 
 	future.Complete(42)
 
-	result, err = future.GetWithTimeout(1000)
+	result, err = future.GetWithTimeout(time.Duration(1000) * time.Millisecond)
 	if err != nil {
 		t.Error("Expected no error, got: ", err)
 	}

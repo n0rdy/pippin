@@ -16,7 +16,7 @@ import (
 // There are two ways to do that:
 // 1. By calling Get() method. This method will block until the value is available. It returns either the pointer to the value or an error.
 // In pippin the error means that the pipeline was interrupted before it could complete that's why the value is not available.
-// 2. By calling GetWithTimeout(timeoutInMillis int) method. This method will block until the value is available or the timeout is reached.
+// 2. By calling GetWithTimeout(timeout time.Duration) method. This method will block until the value is available or the timeout is reached.
 //
 // The recommended way to obtain the value is by calling GetWithTimeout() method, as otherwise the execution might be blocked forever.
 //
@@ -62,9 +62,9 @@ func (f *Future[T]) Get() (*T, error) {
 // The error means that the pipeline was interrupted before it could complete that's why the value is not available.
 //
 // This is the recommended way to obtain the value from the future.
-func (f *Future[T]) GetWithTimeout(timeoutInMillis int) (*T, error) {
+func (f *Future[T]) GetWithTimeout(timeout time.Duration) (*T, error) {
 	if !f.done {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutInMillis)*time.Millisecond)
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 
 		err := f.sem.Acquire(ctx, 1)

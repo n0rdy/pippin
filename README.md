@@ -70,6 +70,117 @@ if err != nil {
 // 12
 ```
 
+### More detailed example
+
+```go
+// create a new pipeline from a slice of integers:
+p := pipeline.FromSlice(
+	[]string{"1", "a", "2", "-3", "4", "5", "b"},
+)
+// result:
+// "1", "a", "2", "-3", "4", "5", "b"
+
+atoiStage := transform.MapWithError(
+	p.InitStage,
+	func(input string) (int, error) {
+		return strconv.Atoi(input)
+	},
+	func(err error) {
+		fmt.Println(err)
+	},
+)
+// result:
+// 1, 2, -3, 4, 5
+// printed to the console: 
+// strconv.Atoi: parsing "a": invalid syntax 
+// strconv.Atoi: parsing "b": invalid syntax
+
+oddNumsStage := transform.Filter(atoiStage, func(input int) bool {
+	return input%2 != 0
+})
+// result:
+// 1, -3, 5
+
+multipliedByTwoStage := transform.Map(oddNumsStage, func(input int) int {
+	return input * 2
+})
+// result:
+// 2, -6, 10
+
+toMatrixStage := transform.MapWithErrorMapper(
+	multipliedByTwoStage,
+	func(input int) ([]int, error) {
+		if input < 0 {
+			return nil, fmt.Errorf("negative number %d", input)
+		}
+
+		res := make([]int, input)
+		for i := 0; i < input; i++ {
+			res[i] = input * i
+		}
+		return res, nil
+	},
+	func(err error) []int {
+		return []int{42}
+	},
+)
+// result:
+// [0, 2], [42], [0, 10, 20, 30, 40, 50, 60, 70, 80, 90]
+
+plusOneStage := transform.FlatMapWithError(
+	toMatrixStage,
+	func(input int) ([]int, error) {
+		if input == 0 {
+			return nil, fmt.Errorf("zero")
+		}
+
+		return []int{input + 1}, nil
+	},
+	func(err error) {
+		fmt.Println(err)
+	},
+)
+// result:
+// [3], [43], [11], [21], [31], [41], [51], [61], [71], [81], [91]
+// printed to the console:
+// zero
+// zero
+
+greaterThan42Stage := transform.FlatMapWithErrorMapper(
+	plusOneStage,
+	func(input int) ([]int, error) {
+		if input <= 42 {
+			return nil, fmt.Errorf("42")
+		}
+		return []int{input}, nil
+	},
+	func(err error) []int {
+		return []int{0}
+	},
+)
+// result:
+// [0], [43], [0], [0], [0], [0], [51], [61], [71], [81], [91]
+
+flattenedStage := transform.FlatMap(greaterThan42Stage, func(input int) int {
+	return input
+})
+// result:
+// [0, 43, 0, 0, 0, 0, 51, 61, 71, 81, 91]
+
+futureSum := asyncaggregate.Sum(flattenedStage)
+// result:
+// 398
+
+result, err := futureSum.GetWithTimeout(time.Duration(10)*time.Second)
+if err != nil {
+	fmt.Println(err)
+} else {
+	fmt.Println(*result)
+}
+// printed to the console:
+// 398
+```
+
 ## Documentation
 
 Find the full documentation [here](https://pkg.go.dev/github.com/n0rdy/pippin).
@@ -300,7 +411,7 @@ This is the way to avoid blocking the execution and a way to early return from a
 There are two ways to do that:
 - by calling `Get()` method. This method will block until the value is available. It returns either the pointer to the value or an error.
 In Pippin the error means that the pipeline was interrupted before it could complete that's why the value is not available.
-- by calling `GetWithTimeout(timeoutInMillis int)` method. This method will block until the value is available or the timeout is reached.
+- by calling `GetWithTimeout(timeout time.Duration)` method. This method will block until the value is available or the timeout is reached.
 
 The recommended way to obtain the value is by calling `GetWithTimeout` method, as otherwise the execution might be blocked forever.
 
