@@ -34,7 +34,11 @@ type Future[T any] struct {
 // NewFuture creates a new future.
 func NewFuture[T any]() Future[T] {
 	sem := semaphore.NewWeighted(1)
-	sem.Acquire(context.Background(), 1)
+	err := sem.Acquire(context.Background(), 1)
+	if err != nil {
+		// this should never happen, as the semaphore is created one line before - please, report an issue if it does
+		panic(err)
+	}
 
 	return Future[T]{
 		sem:  sem,
@@ -51,7 +55,11 @@ func NewFuture[T any]() Future[T] {
 // As an alternative consider using GetWithTimeout() method.
 func (f *Future[T]) Get() (*T, error) {
 	if !f.done {
-		f.sem.Acquire(context.Background(), 1)
+		err := f.sem.Acquire(context.Background(), 1)
+		if err != nil {
+			// this should never happen - please, report an issue if it does
+			return nil, err
+		}
 	}
 	return f.value, f.err
 }
