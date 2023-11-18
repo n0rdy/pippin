@@ -3,6 +3,7 @@ package pipeline
 import (
 	"github.com/n0rdy/pippin/types/statuses"
 	"testing"
+	"time"
 )
 
 func TestFromSlice_Success(t *testing.T) {
@@ -29,6 +30,9 @@ func TestFromSlice_Success(t *testing.T) {
 	}
 
 	p.Interrupt()
+
+	// to sync with the pipeline
+	time.Sleep(100 * time.Millisecond)
 
 	if p.Status != statuses.Interrupted {
 		t.Errorf("Expected status %s, got %s", statuses.Status(statuses.Interrupted).String(), p.Status.String())
@@ -69,6 +73,9 @@ func TestFromMap_Success(t *testing.T) {
 
 	p.Interrupt()
 
+	// to sync with the pipeline
+	time.Sleep(100 * time.Millisecond)
+
 	if p.Status != statuses.Interrupted {
 		t.Errorf("Expected status %s, got %s", statuses.Status(statuses.Interrupted).String(), p.Status.String())
 	}
@@ -100,6 +107,9 @@ func TestFromChannel_Success(t *testing.T) {
 	}
 
 	p.Interrupt()
+
+	// to sync with the pipeline
+	time.Sleep(100 * time.Millisecond)
 
 	if p.Status != statuses.Interrupted {
 		t.Errorf("Expected status %s, got %s", statuses.Status(statuses.Interrupted).String(), p.Status.String())
