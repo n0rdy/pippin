@@ -1,4 +1,4 @@
-module pippin
+module github.com/n0rdy/pippin
 
 go 1.21
 

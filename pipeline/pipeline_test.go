@@ -1,8 +1,8 @@
 package pipeline
 
 import (
-	"pippin/types"
-	"pippin/types/statuses"
+	"github.com/n0rdy/pippin/types"
+	"github.com/n0rdy/pippin/types/statuses"
 	"testing"
 )
 

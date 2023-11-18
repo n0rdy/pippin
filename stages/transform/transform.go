@@ -1,12 +1,12 @@
 package transform
 
 import (
-	"pippin/configs"
-	"pippin/functions"
-	"pippin/ratelimiter"
-	"pippin/stages"
-	"pippin/types/statuses"
-	"pippin/utils"
+	"github.com/n0rdy/pippin/configs"
+	"github.com/n0rdy/pippin/functions"
+	"github.com/n0rdy/pippin/ratelimiter"
+	"github.com/n0rdy/pippin/stages"
+	"github.com/n0rdy/pippin/types/statuses"
+	"github.com/n0rdy/pippin/utils"
 	"sync"
 	"sync/atomic"
 	"time"

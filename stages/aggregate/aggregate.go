@@ -2,12 +2,12 @@ package aggregate
 
 import (
 	"cmp"
-	"pippin/configs"
-	"pippin/functions"
-	"pippin/stages"
-	"pippin/types"
-	"pippin/types/statuses"
-	"pippin/utils"
+	"github.com/n0rdy/pippin/configs"
+	"github.com/n0rdy/pippin/functions"
+	"github.com/n0rdy/pippin/stages"
+	"github.com/n0rdy/pippin/types"
+	"github.com/n0rdy/pippin/types/statuses"
+	"github.com/n0rdy/pippin/utils"
 	"sort"
 	"sync"
 	"time"

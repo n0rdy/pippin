@@ -2,8 +2,8 @@ package stages
 
 import (
 	"context"
-	"pippin/ratelimiter"
-	"pippin/types/statuses"
+	"github.com/n0rdy/pippin/ratelimiter"
+	"github.com/n0rdy/pippin/types/statuses"
 )
 
 const (
