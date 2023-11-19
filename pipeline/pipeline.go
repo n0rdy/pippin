@@ -200,6 +200,7 @@ func from[T any](pipelineInitFunc func(chan<- T), confs ...configs.PipelineConfi
 		}
 
 		logger.Info("Pipeline: started")
+		logger.Info("Stage 1: started")
 
 		go func() {
 			if pc.timeout > 0 {

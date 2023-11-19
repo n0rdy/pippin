@@ -119,7 +119,7 @@ func TestFromSlice_AllPossibleTransformations_Sum_NoConfigs_Success(t *testing.T
 	time.Sleep(1 * time.Second)
 
 	if p.Status != statuses.Done {
-		t.Errorf("expected status to be done, got %s", p.Status.String())
+		t.Errorf("expected status to be Done, got %s", p.Status.String())
 	}
 }
 
@@ -235,7 +235,7 @@ func TestFromSlice_AllPossibleTransformations_Sum_ManualStart_Success(t *testing
 	time.Sleep(1 * time.Second)
 
 	if p.Status != statuses.Done {
-		t.Errorf("expected status to be done, got %s", p.Status.String())
+		t.Errorf("expected status to be Done, got %s", p.Status.String())
 	}
 }
 
@@ -350,7 +350,7 @@ func TestFromSlice_AllPossibleTransformations_Sum_ManualStart_InterruptedBeforeS
 	time.Sleep(1 * time.Second)
 
 	if p.Status != statuses.Interrupted {
-		t.Errorf("expected status to be interrupted, got %s", p.Status.String())
+		t.Errorf("expected status to be Interrupted, got %s", p.Status.String())
 	}
 }
 
@@ -483,7 +483,7 @@ func TestFromSlice_AllPossibleTransformations_Sum_ManualStart_InterruptedAfterSt
 	time.Sleep(1 * time.Second)
 
 	if p.Status != statuses.Interrupted {
-		t.Errorf("expected status to be interrupted, got %s", p.Status.String())
+		t.Errorf("expected status to be Interrupted, got %s", p.Status.String())
 	}
 }
 
@@ -793,7 +793,7 @@ func TestFromSlice_AllPossibleTransformations_Sum_PipelineRateLimiting_TooLowThr
 	time.Sleep(1 * time.Second)
 
 	if p.Status != statuses.Done {
-		t.Errorf("expected status to be done, got %s", p.Status.String())
+		t.Errorf("expected status to be Done, got %s", p.Status.String())
 	}
 }
 
@@ -898,7 +898,7 @@ func TestFromSlice_AllPossibleTransformations_Sum_PipelineRateLimiting_HighThres
 	time.Sleep(1 * time.Second)
 
 	if p.Status != statuses.Done {
-		t.Errorf("expected status to be done, got %s", p.Status.String())
+		t.Errorf("expected status to be Done, got %s", p.Status.String())
 	}
 }
 
@@ -1004,7 +1004,7 @@ func TestFromSlice_AllPossibleTransformations_Sum_PipelineAndStageRateLimiting_S
 	time.Sleep(1 * time.Second)
 
 	if p.Status != statuses.Done {
-		t.Errorf("expected status to be done, got %s", p.Status.String())
+		t.Errorf("expected status to be Done, got %s", p.Status.String())
 	}
 }
 
@@ -1109,7 +1109,7 @@ func TestFromSlice_AllPossibleTransformations_Sum_StageRateLimiting_PerStage_Hig
 	time.Sleep(1 * time.Second)
 
 	if p.Status != statuses.Done {
-		t.Errorf("expected status to be done, got %s", p.Status.String())
+		t.Errorf("expected status to be Done, got %s", p.Status.String())
 	}
 }
 
@@ -1214,7 +1214,7 @@ func TestFromSlice_AllPossibleTransformations_Sum_StageRateLimiting_PerStage_Low
 	time.Sleep(1 * time.Second)
 
 	if p.Status != statuses.Done {
-		t.Errorf("expected status to be done, got %s", p.Status.String())
+		t.Errorf("expected status to be Done, got %s", p.Status.String())
 	}
 }
 
@@ -1322,7 +1322,7 @@ func TestFromSlice_AllPossibleTransformations_Sum_StageRateLimiting_ForStage_Suc
 	time.Sleep(1 * time.Second)
 
 	if p.Status != statuses.Done {
-		t.Errorf("expected status to be done, got %s", p.Status.String())
+		t.Errorf("expected status to be Done, got %s", p.Status.String())
 	}
 }
 
@@ -1430,17 +1430,15 @@ func TestFromSlice_AllPossibleTransformations_Sum_StageRateLimiting_PerStage_Ove
 	time.Sleep(1 * time.Second)
 
 	if p.Status != statuses.Done {
-		t.Errorf("expected status to be done, got %s", p.Status.String())
+		t.Errorf("expected status to be Done, got %s", p.Status.String())
 	}
 }
 
 func TestFromSlice_AllPossibleTransformations_Sum_PipelineConsoleLogger_Success(t *testing.T) {
-	pipelineConsoleLogger := logging.NewConsoleLogger(loglevels.TRACE)
-
 	p := pipeline.FromSlice(
 		[]string{"1", "a", "2", "-3", "4", "5", "b"},
 		configs.PipelineConfig{
-			Logger: pipelineConsoleLogger,
+			Logger: logging.NewConsoleLogger(loglevels.TRACE),
 		},
 	)
 
@@ -1537,18 +1535,15 @@ func TestFromSlice_AllPossibleTransformations_Sum_PipelineConsoleLogger_Success(
 	time.Sleep(1 * time.Second)
 
 	if p.Status != statuses.Done {
-		t.Errorf("expected status to be done, got %s", p.Status.String())
+		t.Errorf("expected status to be Done, got %s", p.Status.String())
 	}
 }
 
 func TestFromSlice_AllPossibleTransformations_Sum_PipelineAndStageConsoleLogger_Success(t *testing.T) {
-	pipelineConsoleLogger := logging.NewConsoleLogger(loglevels.TRACE)
-	stageConsoleLogger := logging.NewConsoleLogger(loglevels.INFO)
-
 	p := pipeline.FromSlice(
 		[]string{"1", "a", "2", "-3", "4", "5", "b"},
 		configs.PipelineConfig{
-			Logger: pipelineConsoleLogger,
+			Logger: logging.NewConsoleLogger(loglevels.TRACE),
 		},
 	)
 
@@ -1594,7 +1589,7 @@ func TestFromSlice_AllPossibleTransformations_Sum_PipelineAndStageConsoleLogger_
 			return []int{42}
 		},
 		configs.StageConfig{
-			Logger: stageConsoleLogger,
+			Logger: logging.NewConsoleLogger(loglevels.INFO),
 		},
 	)
 	// [0, 2], [42], [0, 10, 20, 30, 40, 50, 60, 70, 80, 90]
@@ -1648,7 +1643,7 @@ func TestFromSlice_AllPossibleTransformations_Sum_PipelineAndStageConsoleLogger_
 	time.Sleep(1 * time.Second)
 
 	if p.Status != statuses.Done {
-		t.Errorf("expected status to be done, got %s", p.Status.String())
+		t.Errorf("expected status to be Done, got %s", p.Status.String())
 	}
 }
 

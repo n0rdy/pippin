@@ -249,14 +249,12 @@ If you pipeline performs any network calls within its transformation/aggregation
 
 To create a pipeline with a custom configuration:
 ```go
-pipelineConsoleLogger := logging.NewConsoleLogger(loglevels.DEBUG)
-
 p := pipeline.FromSlice[int]([]int{1, 2, 3, 4, 5}, configs.PipelineConfig{
     ManualStart: true,
     MaxGoroutinesTotal: 100,
     MaxGoroutinesPerStage: 10,
     Timeout: duration.Duration(1000) * time.Millisecond,
-	Logger: &pipelineConsoleLogger,
+	Logger: logging.NewConsoleLogger(loglevels.DEBUG),
 })
 ```
 
@@ -447,7 +445,6 @@ To create a transformation with a custom configuration:
 ```go
 p := pipeline.FromSlice[int]([]int{1, 2, 3, 4, 5})
 
-stageConsoleLogger := logging.NewConsoleLogger(loglevels.INFO)
 // multiplies each number by 2:
 mappingStage := transform.Map[int, int](filteringStage, func(i int) int {
     return i * 2
@@ -455,7 +452,7 @@ mappingStage := transform.Map[int, int](filteringStage, func(i int) int {
     MaxGoroutines: 10,
     Timeout: time.Duration(1000) * time.Millisecond,
     CustomId: 1,
-    Logger: &stageConsoleLogger,
+    Logger: logging.NewConsoleLogger(loglevels.INFO),
 })
 ```
 
