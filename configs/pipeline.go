@@ -1,5 +1,7 @@
 package configs
 
+import "time"
+
 // PipelineConfig is a struct that contains the configuration for a pipeline
 //
 // [PipelineConfig.ManualStart] is a boolean that indicates whether the pipeline should be started manually.
@@ -15,11 +17,11 @@ package configs
 // If it is passed as 0 or less, then there is no limit.
 // It is possible to change the limit for each stage individually - see [StageConfig.MaxGoroutines].
 //
-// [PipelineConfig.TimeoutInMillis] is an integer that indicates the timeout (in milliseconds) for the pipeline.
+// [PipelineConfig.Timeout] indicates the timeout for the pipeline.
 // If it is passed as 0 or less, then there is no timeout.
 type PipelineConfig struct {
 	ManualStart           bool
 	MaxGoroutinesTotal    int
 	MaxGoroutinesPerStage int
-	TimeoutInMillis       int64
+	Timeout               time.Duration
 }

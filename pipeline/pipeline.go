@@ -218,8 +218,8 @@ func parseConfigs(confs ...configs.PipelineConfig) *parsedConfigs {
 		if conf.MaxGoroutinesPerStage > 0 {
 			stageRateLimiter = ratelimiter.NewRateLimiter(conf.MaxGoroutinesPerStage)
 		}
-		if conf.TimeoutInMillis > 0 {
-			timeout = time.Duration(conf.TimeoutInMillis) * time.Millisecond
+		if conf.Timeout > 0 {
+			timeout = conf.Timeout
 		}
 	}
 

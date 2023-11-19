@@ -489,7 +489,7 @@ func TestFromSlice_AllPossibleTransformations_Sum_PipelineTimeoutReached_Success
 	p := pipeline.FromSlice(
 		[]string{"1", "a", "2", "-3", "4", "5", "b"},
 		configs.PipelineConfig{
-			TimeoutInMillis: 1000,
+			Timeout: time.Duration(1000) * time.Millisecond,
 		},
 	)
 
@@ -590,7 +590,7 @@ func TestFromSlice_AllPossibleTransformations_Sum_StageTimeoutReached_Success(t 
 	p := pipeline.FromSlice(
 		[]string{"1", "a", "2", "-3", "4", "5", "b"},
 		configs.PipelineConfig{
-			TimeoutInMillis: 100000,
+			Timeout: time.Duration(100000) * time.Millisecond,
 		},
 	)
 
@@ -637,7 +637,7 @@ func TestFromSlice_AllPossibleTransformations_Sum_StageTimeoutReached_Success(t 
 			return []int{42}
 		},
 		configs.StageConfig{
-			TimeoutInMillis: 1000,
+			Timeout: time.Duration(1000) * time.Millisecond,
 		},
 	)
 	// [0, 2], [42], [0, 10, 20, 30, 40, 50, 60, 70, 80, 90]
