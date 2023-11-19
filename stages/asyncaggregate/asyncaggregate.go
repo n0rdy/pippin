@@ -640,7 +640,7 @@ func localTimeout(confs ...configs.StageConfig) time.Duration {
 	}
 
 	conf := confs[0]
-	return time.Duration(conf.TimeoutInMillis) * time.Millisecond
+	return conf.Timeout
 }
 
 func customStageId(confs ...configs.StageConfig) int64 {
