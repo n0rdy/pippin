@@ -21,16 +21,16 @@ type Status int
 func (s Status) String() string {
 	switch s {
 	case Pending:
-		return "pending"
+		return "Pending"
 	case Running:
-		return "running"
+		return "Running"
 	case Done:
-		return "done"
+		return "Done"
 	case Interrupted:
-		return "interrupted"
+		return "Interrupted"
 	case TimedOut:
-		return "timedOut"
+		return "TimedOut"
 	default:
-		return "unknown"
+		return "Unknown"
 	}
 }

@@ -240,8 +240,10 @@ and even if the pipeline rate limiter is full, the program will spawn a new goro
 - `MaxGoroutinesPerStage` - is an integer that indicates the maximum number of goroutines that can be spawned by each stage. 
 If it is passed as `0` or less, then there is no limit. 
 It is possible to change the limit for each stage individually - see `configs.StageConfig.MaxGoroutines`.
-- `TimeoutInMillis` - is an integer that indicates the timeout in milliseconds for the entire pipeline. 
-If it is passed as `0` or less, then there is no timeout.
+- `Timeout` - indicates the timeout for the entire pipeline. If it is passed as `0` or less, then there is no timeout.
+- `Logger` is a logger that will be used by the pipeline. 
+If it is passed as nil, then the `logging.NoOpsLogger` logger will be used that does nothing.
+Check `logging` package for more details and predefined loggers.
 
 If you pipeline performs any network calls within its transformation/aggregation logic, I'd suggest configuring the maximum number of goroutines to prevent the possible DDoS attack on the target server or reaching the maximum number of open files on the client machine.
 
@@ -251,7 +253,8 @@ p := pipeline.FromSlice[int]([]int{1, 2, 3, 4, 5}, configs.PipelineConfig{
     ManualStart: true,
     MaxGoroutinesTotal: 100,
     MaxGoroutinesPerStage: 10,
-    TimeoutInMillis: 1000,
+    Timeout: duration.Duration(1000) * time.Millisecond,
+	Logger: logging.NewConsoleLogger(loglevels.DEBUG),
 })
 ```
 
@@ -429,10 +432,14 @@ It is represented by the `configs.StageConfig` struct, which contains the follow
 If it is passed as `0` or less, then there is no limit. 
 This config option can be used to change the limit for each stage that comes from the `configs.PipelineConfig.MaxGoroutinesPerStage` option (if provided).
 Please, note that the real number of goroutines might be higher than the number specified here, as the library spawns additional goroutines for internal purposes.
-- `TimeoutInMillis` - is an integer that indicates the timeout in milliseconds for the stage. If it is passed as `0` or less, then there is no timeout.
+- `Timeout` - indicates the timeout for the stage. If it is passed as `0` or less, then there is no timeout.
 - `StageConfig.CustomId` - is a custom ID for the stage. If it is passed as 0, then the stage will be assigned an ID automatically. 
 Auto-generated IDs are calculated as follows: 1 + the ID of the previous stage. 
 The initial stage (the one that is created first) has an ID of 1. It is recommended to either rely on the auto-generated IDs or to provide a custom ID for each stage, otherwise the IDs might be messed up due to the (1 + the ID of the previous stage) logic mentioned above.
+- `Logger` is a logger that will be used by the pipeline.
+If it is passed as nil, then the `logging.NoOpsLogger` logger will be used that does nothing.
+Check `logging` package for more details and predefined loggers.
+This config option can be used to change the logger for each stage that comes from the `configs.PipelineConfig.Logger` option (if provided).
 
 To create a transformation with a custom configuration:
 ```go
@@ -443,8 +450,9 @@ mappingStage := transform.Map[int, int](filteringStage, func(i int) int {
     return i * 2
 }, configs.StageConfig{
     MaxGoroutines: 10,
-    TimeoutInMillis: 1000,
+    Timeout: time.Duration(1000) * time.Millisecond,
     CustomId: 1,
+    Logger: logging.NewConsoleLogger(loglevels.INFO),
 })
 ```
 

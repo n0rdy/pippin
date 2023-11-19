@@ -1,6 +1,9 @@
 package configs
 
-import "time"
+import (
+	"github.com/n0rdy/pippin/logging"
+	"time"
+)
 
 // PipelineConfig is a struct that contains the configuration for a pipeline
 //
@@ -19,9 +22,13 @@ import "time"
 //
 // [PipelineConfig.Timeout] indicates the timeout for the pipeline.
 // If it is passed as 0 or less, then there is no timeout.
+//
+// [PipelineConfig.Logger] is a logger that will be used by the pipeline.
+// If it is passed as nil, then the [logging.NoOpsLogger] logger will be used that does nothing.
 type PipelineConfig struct {
 	ManualStart           bool
 	MaxGoroutinesTotal    int
 	MaxGoroutinesPerStage int
 	Timeout               time.Duration
+	Logger                logging.Logger
 }

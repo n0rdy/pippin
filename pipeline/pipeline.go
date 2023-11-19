@@ -3,6 +3,7 @@ package pipeline
 import (
 	"context"
 	"github.com/n0rdy/pippin/configs"
+	"github.com/n0rdy/pippin/logging"
 	"github.com/n0rdy/pippin/ratelimiter"
 	"github.com/n0rdy/pippin/stages"
 	"github.com/n0rdy/pippin/types"
@@ -34,6 +35,7 @@ type Pipeline[A any] struct {
 	ctx           context.Context
 	ctxCancelFunc context.CancelFunc
 	statusChan    chan statuses.Status
+	logger        logging.Logger
 }
 
 type parsedConfigs struct {
@@ -41,6 +43,7 @@ type parsedConfigs struct {
 	pipelineRateLimiter *ratelimiter.RateLimiter
 	stageRateLimiter    *ratelimiter.RateLimiter
 	timeout             time.Duration
+	logger              logging.Logger
 }
 
 // Start starts the pipeline if it was created with the delayed manual start.
@@ -78,8 +81,10 @@ func (p *Pipeline[A]) listenToStatusUpdates() {
 
 		switch status {
 		case statuses.Done, statuses.Interrupted, statuses.TimedOut:
+			p.logger.Info("Pipeline: finished with status " + status.String())
 			close(p.statusChan)
 			utils.StopSafely(p.timeoutTimer)
+			p.logger.Close()
 		}
 	}
 }
@@ -133,7 +138,7 @@ func FromChannel[T any](fromCh <-chan T, confs ...configs.PipelineConfig) *Pipel
 // There is a possibility to change the limit for each stage individually - see [configs.StageConfig.MaxGoroutines].
 // If the limit is reached, then the pipeline will wait until the number of goroutines is decreased.
 //
-// The [configs.PipelineConfig.TimeoutInMillis] config can be used to set the timeout for the pipeline.
+// The [configs.PipelineConfig.Timeout] config can be used to set the timeout for the pipeline.
 func from[T any](pipelineInitFunc func(chan<- T), confs ...configs.PipelineConfig) *Pipeline[T] {
 	initChan := make(chan T)
 	pipelineStatusChan := make(chan statuses.Status)
@@ -146,6 +151,9 @@ func from[T any](pipelineInitFunc func(chan<- T), confs ...configs.PipelineConfi
 	if starter != nil {
 		stageStarter = make(chan struct{})
 	}
+	logger := pc.logger
+
+	logger.Debug("Pipeline: initiating...")
 
 	var status statuses.Status
 	if starter == nil {
@@ -156,8 +164,8 @@ func from[T any](pipelineInitFunc func(chan<- T), confs ...configs.PipelineConfi
 
 	p := &Pipeline[T]{
 		InitStage: stages.NewInitStage(
-			initChan, pc.pipelineRateLimiter, pc.stageRateLimiter,
-			stageStarter, ctx, ctxCancelFunc, pipelineStatusChan,
+			initChan, pc.pipelineRateLimiter, pc.stageRateLimiter, stageStarter,
+			ctx, ctxCancelFunc, pipelineStatusChan, logger,
 		),
 		Status:        status,
 		rateLimiter:   pc.pipelineRateLimiter,
@@ -165,6 +173,7 @@ func from[T any](pipelineInitFunc func(chan<- T), confs ...configs.PipelineConfi
 		ctx:           ctx,
 		ctxCancelFunc: ctxCancelFunc,
 		statusChan:    pipelineStatusChan,
+		logger:        logger,
 	}
 
 	go p.listenToStatusUpdates()
@@ -173,22 +182,30 @@ func from[T any](pipelineInitFunc func(chan<- T), confs ...configs.PipelineConfi
 		defer close(initChan)
 
 		if starter != nil {
+			logger.Debug("Pipeline: waiting for the start signal...")
+
 			select {
 			case _, ok := <-starter:
 				if ok {
+					logger.Debug("Pipeline: start signal received")
 					stageStarter <- struct{}{}
 					close(starter)
 				}
 			case <-ctx.Done():
+				logger.Debug("Pipeline: interrupted before the start signal")
 				// if the pipeline is interrupted before it is started, then return
 				close(starter)
 				return
 			}
 		}
 
+		logger.Info("Pipeline: started")
+		logger.Info("Stage 1: started")
+
 		go func() {
 			if pc.timeout > 0 {
 				p.timeoutTimer = time.AfterFunc(pc.timeout, func() {
+					logger.Info("Pipeline: timeout reached for pipeline - interrupting the pipeline")
 					ctxCancelFunc()
 					pipelineStatusChan <- statuses.TimedOut
 				})
@@ -196,6 +213,7 @@ func from[T any](pipelineInitFunc func(chan<- T), confs ...configs.PipelineConfi
 		}()
 
 		pipelineInitFunc(initChan)
+		logger.Info("Stage 1: finished")
 	}()
 
 	return p
@@ -206,6 +224,7 @@ func parseConfigs(confs ...configs.PipelineConfig) *parsedConfigs {
 	var pipelineRateLimiter *ratelimiter.RateLimiter
 	var stageRateLimiter *ratelimiter.RateLimiter
 	var timeout time.Duration
+	var logger logging.Logger
 
 	if len(confs) > 0 {
 		conf := confs[0]
@@ -221,6 +240,13 @@ func parseConfigs(confs ...configs.PipelineConfig) *parsedConfigs {
 		if conf.Timeout > 0 {
 			timeout = conf.Timeout
 		}
+		if conf.Logger != nil {
+			logger = conf.Logger
+		}
+	}
+
+	if logger == nil {
+		logger = logging.NewNoOpsLogger()
 	}
 
 	return &parsedConfigs{
@@ -228,5 +254,6 @@ func parseConfigs(confs ...configs.PipelineConfig) *parsedConfigs {
 		pipelineRateLimiter: pipelineRateLimiter,
 		stageRateLimiter:    stageRateLimiter,
 		timeout:             timeout,
+		logger:              logger,
 	}
 }
