@@ -3,11 +3,13 @@ package main
 import (
 	"fmt"
 	"github.com/n0rdy/pippin/configs"
+	"github.com/n0rdy/pippin/logging"
 	"github.com/n0rdy/pippin/pipeline"
 	"github.com/n0rdy/pippin/stages/aggregate"
 	"github.com/n0rdy/pippin/stages/asyncaggregate"
 	"github.com/n0rdy/pippin/stages/transform"
 	"github.com/n0rdy/pippin/types"
+	"github.com/n0rdy/pippin/types/loglevels"
 	"github.com/n0rdy/pippin/types/statuses"
 	"github.com/n0rdy/pippin/utils"
 	"go.uber.org/goleak"
@@ -1375,6 +1377,224 @@ func TestFromSlice_AllPossibleTransformations_Sum_StageRateLimiting_PerStage_Ove
 		},
 		func(err error) []int {
 			return []int{42}
+		},
+	)
+	// [0, 2], [42], [0, 10, 20, 30, 40, 50, 60, 70, 80, 90]
+
+	plusOneStage := transform.FlatMapWithError(
+		toMatrixStage,
+		func(input int) ([]int, error) {
+			if input == 0 {
+				return nil, fmt.Errorf("zero")
+			}
+
+			return []int{input + 1}, nil
+		},
+		func(err error) {
+			fmt.Println(err)
+		},
+	)
+	// [3], [43], [11], [21], [31], [41], [51], [61], [71], [81], [91]
+
+	greaterThan42Stage := transform.FlatMapWithErrorMapper(
+		plusOneStage,
+		func(input int) ([]int, error) {
+			if input <= 42 {
+				return nil, fmt.Errorf("42")
+			}
+			return []int{input}, nil
+		},
+		func(err error) []int {
+			return []int{0}
+		},
+	)
+	// [0], [43], [0], [0], [0], [0], [51], [61], [71], [81], [91]
+
+	flattenedStage := transform.FlatMap(greaterThan42Stage, func(input int) int {
+		return input
+	})
+	// [0, 43, 0, 0, 0, 0, 51, 61, 71, 81, 91]
+
+	sum, err := aggregate.Sum(flattenedStage)
+	// 398
+
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	} else {
+		if *sum != 398 {
+			t.Errorf("expected sum to be 398, got %d", *sum)
+		}
+	}
+
+	// to sync with the pipeline
+	time.Sleep(1 * time.Second)
+
+	if p.Status != statuses.Done {
+		t.Errorf("expected status to be done, got %s", p.Status.String())
+	}
+}
+
+func TestFromSlice_AllPossibleTransformations_Sum_PipelineConsoleLogger_Success(t *testing.T) {
+	pipelineConsoleLogger := logging.NewConsoleLogger(loglevels.TRACE)
+
+	p := pipeline.FromSlice(
+		[]string{"1", "a", "2", "-3", "4", "5", "b"},
+		configs.PipelineConfig{
+			Logger: pipelineConsoleLogger,
+		},
+	)
+
+	if p.Status != statuses.Running {
+		t.Errorf("expected status to be Running, got %s", p.Status.String())
+	}
+
+	atoiStage := transform.MapWithError(
+		p.InitStage,
+		func(input string) (int, error) {
+			return strconv.Atoi(input)
+		},
+		func(err error) {
+			fmt.Println(err)
+		},
+	)
+	// 1, 2, -3, 4, 5
+
+	oddNumsStage := transform.Filter(atoiStage, func(input int) bool {
+		return input%2 != 0
+	})
+	// 1, -3, 5
+
+	multipliedByTwoStage := transform.Map(oddNumsStage, func(input int) int {
+		return input * 2
+	})
+	// 2, -6, 10
+
+	toMatrixStage := transform.MapWithErrorMapper(
+		multipliedByTwoStage,
+		func(input int) ([]int, error) {
+			if input < 0 {
+				return nil, fmt.Errorf("negative number %d", input)
+			}
+
+			res := make([]int, input)
+			for i := 0; i < input; i++ {
+				res[i] = input * i
+			}
+			return res, nil
+		},
+		func(err error) []int {
+			return []int{42}
+		},
+	)
+	// [0, 2], [42], [0, 10, 20, 30, 40, 50, 60, 70, 80, 90]
+
+	plusOneStage := transform.FlatMapWithError(
+		toMatrixStage,
+		func(input int) ([]int, error) {
+			if input == 0 {
+				return nil, fmt.Errorf("zero")
+			}
+
+			return []int{input + 1}, nil
+		},
+		func(err error) {
+			fmt.Println(err)
+		},
+	)
+	// [3], [43], [11], [21], [31], [41], [51], [61], [71], [81], [91]
+
+	greaterThan42Stage := transform.FlatMapWithErrorMapper(
+		plusOneStage,
+		func(input int) ([]int, error) {
+			if input <= 42 {
+				return nil, fmt.Errorf("42")
+			}
+			return []int{input}, nil
+		},
+		func(err error) []int {
+			return []int{0}
+		},
+	)
+	// [0], [43], [0], [0], [0], [0], [51], [61], [71], [81], [91]
+
+	flattenedStage := transform.FlatMap(greaterThan42Stage, func(input int) int {
+		return input
+	})
+	// [0, 43, 0, 0, 0, 0, 51, 61, 71, 81, 91]
+
+	sum, err := aggregate.Sum(flattenedStage)
+	// 398
+
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	} else {
+		if *sum != 398 {
+			t.Errorf("expected sum to be 398, got %d", *sum)
+		}
+	}
+
+	// to sync with the pipeline
+	time.Sleep(1 * time.Second)
+
+	if p.Status != statuses.Done {
+		t.Errorf("expected status to be done, got %s", p.Status.String())
+	}
+}
+
+func TestFromSlice_AllPossibleTransformations_Sum_PipelineAndStageConsoleLogger_Success(t *testing.T) {
+	pipelineConsoleLogger := logging.NewConsoleLogger(loglevels.TRACE)
+	stageConsoleLogger := logging.NewConsoleLogger(loglevels.INFO)
+
+	p := pipeline.FromSlice(
+		[]string{"1", "a", "2", "-3", "4", "5", "b"},
+		configs.PipelineConfig{
+			Logger: pipelineConsoleLogger,
+		},
+	)
+
+	if p.Status != statuses.Running {
+		t.Errorf("expected status to be Running, got %s", p.Status.String())
+	}
+
+	atoiStage := transform.MapWithError(
+		p.InitStage,
+		func(input string) (int, error) {
+			return strconv.Atoi(input)
+		},
+		func(err error) {
+			fmt.Println(err)
+		},
+	)
+	// 1, 2, -3, 4, 5
+
+	oddNumsStage := transform.Filter(atoiStage, func(input int) bool {
+		return input%2 != 0
+	})
+	// 1, -3, 5
+
+	multipliedByTwoStage := transform.Map(oddNumsStage, func(input int) int {
+		return input * 2
+	})
+	// 2, -6, 10
+
+	toMatrixStage := transform.MapWithErrorMapper(
+		multipliedByTwoStage,
+		func(input int) ([]int, error) {
+			if input < 0 {
+				return nil, fmt.Errorf("negative number %d", input)
+			}
+
+			res := make([]int, input)
+			for i := 0; i < input; i++ {
+				res[i] = input * i
+			}
+			return res, nil
+		},
+		func(err error) []int {
+			return []int{42}
+		},
+		configs.StageConfig{
+			Logger: stageConsoleLogger,
 		},
 	)
 	// [0, 2], [42], [0, 10, 20, 30, 40, 50, 60, 70, 80, 90]

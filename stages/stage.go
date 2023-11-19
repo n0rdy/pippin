@@ -2,6 +2,7 @@ package stages
 
 import (
 	"context"
+	"github.com/n0rdy/pippin/logging"
 	"github.com/n0rdy/pippin/ratelimiter"
 	"github.com/n0rdy/pippin/types/statuses"
 )
@@ -52,6 +53,7 @@ type Stage[T any] struct {
 	PipelineRateLimiter   *ratelimiter.RateLimiter
 	StageRateLimiter      *ratelimiter.RateLimiter
 	Starter               chan struct{}
+	Logger                logging.Logger
 	stageCtx              context.Context
 	stageCtxCancelFunc    context.CancelFunc
 	pipelineCtxCancelFunc context.CancelFunc
@@ -59,7 +61,7 @@ type Stage[T any] struct {
 }
 
 // NewInitStage is a function that creates a new stage based on the provided parameters.
-func NewInitStage[T any](ch <-chan T, pipelineRateLimiter *ratelimiter.RateLimiter, stageRateLimiter *ratelimiter.RateLimiter, starter chan struct{}, pipelineCtx context.Context, pipelineCtxCancelFunc context.CancelFunc, pipelineStatusChan chan<- statuses.Status) Stage[T] {
+func NewInitStage[T any](ch <-chan T, pipelineRateLimiter *ratelimiter.RateLimiter, stageRateLimiter *ratelimiter.RateLimiter, starter chan struct{}, pipelineCtx context.Context, pipelineCtxCancelFunc context.CancelFunc, pipelineStatusChan chan<- statuses.Status, logger logging.Logger) Stage[T] {
 	stageCtx, stageCtxCancelFunc := context.WithCancel(pipelineCtx)
 
 	return Stage[T]{
@@ -68,6 +70,7 @@ func NewInitStage[T any](ch <-chan T, pipelineRateLimiter *ratelimiter.RateLimit
 		PipelineRateLimiter:   pipelineRateLimiter,
 		StageRateLimiter:      stageRateLimiter,
 		Starter:               starter,
+		Logger:                logger,
 		stageCtx:              stageCtx,
 		stageCtxCancelFunc:    stageCtxCancelFunc,
 		pipelineCtxCancelFunc: pipelineCtxCancelFunc,
@@ -91,6 +94,7 @@ func FromStage[In, Out any](stage Stage[In], ch <-chan Out, starter chan struct{
 		PipelineRateLimiter:   stage.PipelineRateLimiter,
 		StageRateLimiter:      ratelimiter.Copy(stage.StageRateLimiter),
 		Starter:               starter,
+		Logger:                stage.Logger,
 		stageCtx:              stageCtx,
 		stageCtxCancelFunc:    stageCtxCancelFunc,
 		pipelineCtxCancelFunc: stage.pipelineCtxCancelFunc,

@@ -3,10 +3,12 @@ package transform
 import (
 	"github.com/n0rdy/pippin/configs"
 	"github.com/n0rdy/pippin/functions"
+	"github.com/n0rdy/pippin/logging"
 	"github.com/n0rdy/pippin/ratelimiter"
 	"github.com/n0rdy/pippin/stages"
 	"github.com/n0rdy/pippin/types/statuses"
 	"github.com/n0rdy/pippin/utils"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -242,35 +244,52 @@ func transform[In, Out any](prevStage stages.Stage[In], transformFunc func(inArg
 	}
 
 	localRateLimiter := localRateLimiter(prevStage.StageRateLimiter, confs...)
+	localLogger, stageSpecific := localLogger(prevStage.Logger, confs...)
+	if stageSpecific {
+		defer localLogger.Close()
+	}
 	localTimeout := localTimeout(confs...)
 
+	var stageIdAsString string
 	customStageId := customStageId(confs...)
 	if customStageId != 0 {
-		prevStage.Id = customStageId
+		stageIdAsString = "stage " + strconv.FormatInt(customStageId, 10) + ": "
+	} else {
+		stageIdAsString = "stage " + strconv.FormatInt(prevStage.Id+1, 10) + ": "
 	}
+
+	localLogger.Debug(stageIdAsString + "initiating...")
 
 	go func() {
 		defer ratelimiter.CloseSafely(localRateLimiter)
 		defer close(outChan)
 
 		if prevStage.Starter != nil {
+			localLogger.Debug(stageIdAsString + "waiting for the start signal...")
+
 			select {
 			case _, ok := <-prevStage.Starter:
 				if ok {
+					localLogger.Debug(stageIdAsString + "start signal received")
 					nextStageStarter <- struct{}{}
 					close(prevStage.Starter)
 				}
 			case <-prevStage.Context().Done():
+				localLogger.Debug(stageIdAsString + "context done signal received before the start signal")
+
 				close(prevStage.Starter)
 				// if the pipeline is interrupted before it is started, then return
 				return
 			}
 		}
 
+		localLogger.Info(stageIdAsString + "started")
+
 		var timeoutTimer *time.Timer
 		go func() {
 			if localTimeout > 0 {
 				timeoutTimer = time.AfterFunc(localTimeout, func() {
+					localLogger.Info(stageIdAsString + "timeout reached for stage - interrupting the pipeline")
 					prevStage.InterruptPipeline()
 					prevStage.SetPipelineStatus(statuses.TimedOut)
 				})
@@ -284,6 +303,7 @@ func transform[In, Out any](prevStage stages.Stage[In], transformFunc func(inArg
 			select {
 			case in, ok := <-inChan:
 				if ok {
+					localLogger.Debug(stageIdAsString + "input received")
 					// to make sure that at least 1 goroutine is running regardless of the pipeline rate limiter (if configured)
 					acquired := ratelimiter.AcquireSafelyIfRunning(prevStage.PipelineRateLimiter, numOfWorkers)
 					ratelimiter.AcquireSafely(localRateLimiter)
@@ -295,11 +315,16 @@ func transform[In, Out any](prevStage stages.Stage[In], transformFunc func(inArg
 						defer ratelimiter.ReleaseSafely(localRateLimiter)
 
 						transformFunc(inArg, outChan, localWg)
+
+						localLogger.Debug(stageIdAsString + "input processed")
 					}(in, acquired)
 				} else {
+					localLogger.Debug(stageIdAsString + "input channel closed")
 					running = false
 				}
 			case <-prevStage.Context().Done():
+				localLogger.Debug(stageIdAsString + "context done signal received")
+
 				utils.DrainChan(inChan)
 				running = false
 			}
@@ -307,6 +332,8 @@ func transform[In, Out any](prevStage stages.Stage[In], transformFunc func(inArg
 
 		localWg.Wait()
 		utils.StopSafely(timeoutTimer)
+
+		localLogger.Info(stageIdAsString + "finished")
 	}()
 
 	return stages.FromStage(prevStage, outChan, nextStageStarter)
@@ -322,35 +349,54 @@ func transformAsync[In, Out any](prevStage stages.Stage[In], transformAsyncFunc 
 	}
 
 	localRateLimiter := localRateLimiter(prevStage.StageRateLimiter, confs...)
+	localLogger, stageSpecific := localLogger(prevStage.Logger, confs...)
+	if stageSpecific {
+		defer localLogger.Close()
+	}
 	localTimeout := localTimeout(confs...)
 
+	var stageIdAsString string
 	customStageId := customStageId(confs...)
 	if customStageId != 0 {
-		prevStage.Id = customStageId
+		stageIdAsString = "stage " + strconv.FormatInt(customStageId, 10) + ": "
+	} else {
+		stageIdAsString = "stage " + strconv.FormatInt(prevStage.Id+1, 10) + ": "
 	}
+
+	localLogger.Debug(stageIdAsString + "initiating...")
 
 	go func() {
 		defer ratelimiter.CloseSafely(localRateLimiter)
 		defer close(outChan)
 
 		if prevStage.Starter != nil {
+			localLogger.Debug(stageIdAsString + "waiting for the start signal...")
+
 			select {
 			case _, ok := <-prevStage.Starter:
 				if ok {
+					localLogger.Debug(stageIdAsString + "start signal received")
+
 					nextStageStarter <- struct{}{}
 					close(prevStage.Starter)
 				}
 			case <-prevStage.Context().Done():
+				localLogger.Debug(stageIdAsString + "context done signal received before the start signal")
+
 				close(prevStage.Starter)
 				// if the pipeline is interrupted before it is started, then return
 				return
 			}
 		}
 
+		localLogger.Info(stageIdAsString + "started")
+
 		var timeoutTimer *time.Timer
 		go func() {
 			if localTimeout > 0 {
 				timeoutTimer = time.AfterFunc(localTimeout, func() {
+					localLogger.Info(stageIdAsString + "timeout reached for stage - interrupting the pipeline")
+
 					prevStage.InterruptPipeline()
 					prevStage.SetPipelineStatus(statuses.TimedOut)
 				})
@@ -365,6 +411,7 @@ func transformAsync[In, Out any](prevStage stages.Stage[In], transformAsyncFunc 
 			select {
 			case in, ok := <-inChan:
 				if ok {
+					localLogger.Debug(stageIdAsString + "input received")
 					// to make sure that at least 1 goroutine is running regardless of the pipeline rate limiter (if configured)
 					acquired := ratelimiter.AcquireSafelyIfRunning(prevStage.PipelineRateLimiter, numOfWorkers)
 					ratelimiter.AcquireSafely(localRateLimiter)
@@ -376,11 +423,15 @@ func transformAsync[In, Out any](prevStage stages.Stage[In], transformAsyncFunc 
 						defer ratelimiter.ReleaseSafely(localRateLimiter)
 
 						transformAsyncFunc(inArg, outChan, localWg, prevStage.PipelineRateLimiter, localRateLimiter, numOfAsyncWorkersArg)
+
+						localLogger.Debug(stageIdAsString + "input processed")
 					}(in, acquired, numOfAsyncWorkers)
 				} else {
+					localLogger.Debug(stageIdAsString + "input channel closed")
 					running = false
 				}
 			case <-prevStage.Context().Done():
+				localLogger.Debug(stageIdAsString + "context done signal received")
 				utils.DrainChan(inChan)
 				running = false
 			}
@@ -388,6 +439,8 @@ func transformAsync[In, Out any](prevStage stages.Stage[In], transformAsyncFunc 
 
 		localWg.Wait()
 		utils.StopSafely(timeoutTimer)
+
+		localLogger.Info(stageIdAsString + "finished")
 	}()
 
 	return stages.FromStage(prevStage, outChan, nextStageStarter)
@@ -405,6 +458,19 @@ func localRateLimiter(stageRateLimiter *ratelimiter.RateLimiter, confs ...config
 		return ratelimiter.NewRateLimiter(conf.MaxGoroutines)
 	}
 	return stageRateLimiter
+}
+
+func localLogger(stageLogger logging.Logger, confs ...configs.StageConfig) (logging.Logger, bool) {
+	if len(confs) == 0 {
+		return stageLogger, false
+	}
+
+	conf := confs[0]
+	if conf.Logger != nil {
+		// stage configs overrides pipeline configs for logger
+		return conf.Logger, true
+	}
+	return stageLogger, false
 }
 
 func localTimeout(confs ...configs.StageConfig) time.Duration {

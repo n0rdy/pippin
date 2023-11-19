@@ -4,11 +4,13 @@ import (
 	"cmp"
 	"github.com/n0rdy/pippin/configs"
 	"github.com/n0rdy/pippin/functions"
+	"github.com/n0rdy/pippin/logging"
 	"github.com/n0rdy/pippin/stages"
 	"github.com/n0rdy/pippin/types"
 	"github.com/n0rdy/pippin/types/statuses"
 	"github.com/n0rdy/pippin/utils"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -511,17 +513,27 @@ func aggregate[In, Aggr, Res any](prevStage stages.Stage[In], aggFunc func(aggrR
 	validate(prevStage)
 
 	inChan := prevStage.Chan
+	localLogger, stageSpecific := localLogger(prevStage.Logger, confs...)
+	if stageSpecific {
+		defer localLogger.Close()
+	}
 	localTimeout := localTimeout(confs...)
 
+	var stageIdAsString string
 	customStageId := customStageId(confs...)
 	if customStageId != 0 {
-		prevStage.Id = customStageId
+		stageIdAsString = "stage " + strconv.FormatInt(customStageId, 10) + ": "
+	} else {
+		stageIdAsString = "stage " + strconv.FormatInt(prevStage.Id+1, 10) + ": "
 	}
+
+	localLogger.Debug(stageIdAsString + "initiating...")
 
 	var timeoutTimer *time.Timer
 	go func() {
 		if localTimeout > 0 {
 			timeoutTimer = time.AfterFunc(localTimeout, func() {
+				localLogger.Info(stageIdAsString + "timeout reached for stage - interrupting the pipeline")
 				prevStage.InterruptPipeline()
 				prevStage.SetPipelineStatus(statuses.TimedOut)
 			})
@@ -535,11 +547,15 @@ func aggregate[In, Aggr, Res any](prevStage stages.Stage[In], aggFunc func(aggrR
 		select {
 		case in, ok := <-inChan:
 			if ok {
+				localLogger.Debug(stageIdAsString + "input received")
 				result = aggFunc(result, in)
+				localLogger.Debug(stageIdAsString + "input processed")
 			} else {
+				localLogger.Debug(stageIdAsString + "input channel closed")
 				running = false
 			}
 		case <-prevStage.Context().Done():
+			localLogger.Debug(stageIdAsString + "context done signal received")
 			utils.StopSafely(timeoutTimer)
 			return nil, prevStage.Context().Err()
 		}
@@ -550,13 +566,29 @@ func aggregate[In, Aggr, Res any](prevStage stages.Stage[In], aggFunc func(aggrR
 	res := resFunc(result)
 	prevStage.SetPipelineStatus(statuses.Done)
 
+	localLogger.Info(stageIdAsString + "finished")
+
 	return &res, nil
 }
 
 func validate[In any](prevStage stages.Stage[In]) {
 	if prevStage.Starter != nil {
+		prevStage.Logger.Error("Sync aggregation doesn't support manual delayed start - use async aggregation from the [asyncaggregate] package instead")
 		panic("Sync aggregation doesn't support manual delayed start - use async aggregation from the [asyncaggregate] package instead")
 	}
+}
+
+func localLogger(stageLogger logging.Logger, confs ...configs.StageConfig) (logging.Logger, bool) {
+	if len(confs) == 0 {
+		return stageLogger, false
+	}
+
+	conf := confs[0]
+	if conf.Logger != nil {
+		// stage configs overrides pipeline configs for logger
+		return conf.Logger, true
+	}
+	return stageLogger, false
 }
 
 func localTimeout(confs ...configs.StageConfig) time.Duration {
