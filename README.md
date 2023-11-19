@@ -1,6 +1,6 @@
 # Pippin
 
-Pippin is a simple, lightweight, and (hopefully) easy to use Go library for creating and managing data pipelines.
+Pippin is a simple, lightweight, and (hopefully) easy to use Go library for creating and managing data pipelines on your machine.
 
 The library heavily relies on goroutines and channels, but this complexity is hidden from the user behind a simple API.
 Basically, this is the main purpose why I implemented this library in the first place.
