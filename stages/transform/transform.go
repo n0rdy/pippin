@@ -303,12 +303,12 @@ func transform[In, Out any](prevStage stages.Stage[In], transformFunc func(inArg
 			select {
 			case in, ok := <-inChan:
 				if ok {
+					localWg.Add(1)
+
 					localLogger.Debug(stageIdAsString + "input received")
 					// to make sure that at least 1 goroutine is running regardless of the pipeline rate limiter (if configured)
 					acquired := ratelimiter.AcquireSafelyIfRunning(prevStage.PipelineRateLimiter, numOfWorkers)
 					ratelimiter.AcquireSafely(localRateLimiter)
-
-					localWg.Add(1)
 
 					go func(inArg In, pipelineRateLimiterAcquired bool) {
 						defer ratelimiter.ReleaseSafelyIfAcquired(prevStage.PipelineRateLimiter, pipelineRateLimiterAcquired, numOfWorkers)
@@ -349,6 +349,11 @@ func transformAsync[In, Out any](prevStage stages.Stage[In], transformAsyncFunc 
 	}
 
 	localRateLimiter := localRateLimiter(prevStage.StageRateLimiter, confs...)
+	// localAsyncRateLimiter is used to limit the number of async workers
+	// if we rely only on the localRateLimiter, all the limits might be exhausted by the workers that spawn async workers,
+	// so the async workers won't be able to acquire the resources from the localRateLimiter, and the pipeline will be stuck - deadlock.
+	// that's why we need a separate rate limiter for the async workers.
+	localAsyncRateLimiter := ratelimiter.Copy(localRateLimiter)
 	localLogger, stageSpecific := localLogger(prevStage.Logger, confs...)
 	if stageSpecific {
 		defer localLogger.Close()
@@ -367,6 +372,7 @@ func transformAsync[In, Out any](prevStage stages.Stage[In], transformAsyncFunc 
 
 	go func() {
 		defer ratelimiter.CloseSafely(localRateLimiter)
+		defer ratelimiter.CloseSafely(localAsyncRateLimiter)
 		defer close(outChan)
 
 		if prevStage.Starter != nil {
@@ -411,18 +417,18 @@ func transformAsync[In, Out any](prevStage stages.Stage[In], transformAsyncFunc 
 			select {
 			case in, ok := <-inChan:
 				if ok {
+					localWg.Add(1)
+
 					localLogger.Debug(stageIdAsString + "input received")
 					// to make sure that at least 1 goroutine is running regardless of the pipeline rate limiter (if configured)
 					acquired := ratelimiter.AcquireSafelyIfRunning(prevStage.PipelineRateLimiter, numOfWorkers)
 					ratelimiter.AcquireSafely(localRateLimiter)
 
-					localWg.Add(1)
-
 					go func(inArg In, pipelineRateLimiterAcquired bool, numOfAsyncWorkersArg *atomic.Int64) {
 						defer ratelimiter.ReleaseSafelyIfAcquired(prevStage.PipelineRateLimiter, pipelineRateLimiterAcquired, numOfWorkers)
 						defer ratelimiter.ReleaseSafely(localRateLimiter)
 
-						transformAsyncFunc(inArg, outChan, localWg, prevStage.PipelineRateLimiter, localRateLimiter, numOfAsyncWorkersArg)
+						transformAsyncFunc(inArg, outChan, localWg, prevStage.PipelineRateLimiter, localAsyncRateLimiter, numOfAsyncWorkersArg)
 
 						localLogger.Debug(stageIdAsString + "input processed")
 					}(in, acquired, numOfAsyncWorkers)
@@ -448,7 +454,7 @@ func transformAsync[In, Out any](prevStage stages.Stage[In], transformAsyncFunc 
 
 func localRateLimiter(stageRateLimiter *ratelimiter.RateLimiter, confs ...configs.StageConfig) *ratelimiter.RateLimiter {
 	if len(confs) == 0 {
-		return nil
+		return stageRateLimiter
 	}
 
 	conf := confs[0]

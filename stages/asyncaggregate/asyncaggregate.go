@@ -591,12 +591,12 @@ func aggregate[In, Aggr, Res any](prevStage stages.Stage[In], aggFunc func(aggrR
 			select {
 			case in, ok := <-inChan:
 				if ok {
+					localWg.Add(1)
+
 					localLogger.Debug(stageIdAsString + "input received")
 					// to make sure that at least 1 goroutine is running regardless of the pipeline rate limiter (if configured)
 					acquired := ratelimiter.AcquireSafelyIfRunning(prevStage.PipelineRateLimiter, numOfWorkers)
 					ratelimiter.AcquireSafely(localRateLimiter)
-
-					localWg.Add(1)
 
 					go func(inArg In, pipelineRateLimiterAcquired bool) {
 						defer ratelimiter.ReleaseSafelyIfAcquired(prevStage.PipelineRateLimiter, pipelineRateLimiterAcquired, numOfWorkers)
@@ -648,7 +648,7 @@ func aggregate[In, Aggr, Res any](prevStage stages.Stage[In], aggFunc func(aggrR
 
 func localRateLimiter(stageRateLimiter *ratelimiter.RateLimiter, confs ...configs.StageConfig) *ratelimiter.RateLimiter {
 	if len(confs) == 0 {
-		return nil
+		return stageRateLimiter
 	}
 
 	conf := confs[0]
