@@ -20,7 +20,10 @@ There still might be some bugs, so please, feel free to report them.
 We've had one, yes. But what about second ~~breakfast~~ library?
 
 ## Table of contents
+* [Installation](#installation)
 * [Usage](#usage)
+    * [Simple example](#simple-example)
+    * [More detailed example](#more-detailed-example)
 * [Documentation](#documentation)
 * [Concepts](#concepts)
     * [Pipeline](#pipeline)
@@ -244,6 +247,7 @@ It is possible to change the limit for each stage individually - see `configs.St
 - `Logger` is a logger that will be used by the pipeline. 
 If it is passed as nil, then the `logging.NoOpsLogger` logger will be used that does nothing.
 Check `logging` package for more details and predefined loggers.
+- `InitStageConfig` is a configuration for the initial stage. See `configs.StageConfig` for more details.
 
 If you pipeline performs any network calls within its transformation/aggregation logic, I'd suggest configuring the maximum number of goroutines to prevent the possible DDoS attack on the target server or reaching the maximum number of open files on the client machine.
 

@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	initStageId = 1
+	InitStageId = 1
 )
 
 // Stage is a struct that represents a stage in a pipeline.
@@ -65,7 +65,7 @@ func NewInitStage[T any](ch <-chan T, pipelineRateLimiter *ratelimiter.RateLimit
 	stageCtx, stageCtxCancelFunc := context.WithCancel(pipelineCtx)
 
 	return Stage[T]{
-		Id:                    initStageId,
+		Id:                    InitStageId,
 		Chan:                  ch,
 		PipelineRateLimiter:   pipelineRateLimiter,
 		StageRateLimiter:      stageRateLimiter,

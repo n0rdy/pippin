@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// PipelineConfig is a struct that contains the configuration for a pipeline
+// PipelineConfig is a struct that contains the configuration for a pipeline.
 //
 // [PipelineConfig.ManualStart] is a boolean that indicates whether the pipeline should be started manually.
 // If it is passed as true, the pipeline will not start automatically on creation, and it's up to the user to start it by calling the [pipeline.Pipeline.Start] method.
@@ -25,10 +25,14 @@ import (
 //
 // [PipelineConfig.Logger] is a logger that will be used by the pipeline.
 // If it is passed as nil, then the [logging.NoOpsLogger] logger will be used that does nothing.
+//
+// [PipelineConfig.InitStageConfig] is a config for the init stage.
+// See [StageConfig] for more details.
 type PipelineConfig struct {
 	ManualStart           bool
 	MaxGoroutinesTotal    int
 	MaxGoroutinesPerStage int
 	Timeout               time.Duration
 	Logger                logging.Logger
+	InitStageConfig       *StageConfig
 }

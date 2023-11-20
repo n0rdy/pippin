@@ -9,6 +9,7 @@ import (
 	"github.com/n0rdy/pippin/types"
 	"github.com/n0rdy/pippin/types/statuses"
 	"github.com/n0rdy/pippin/utils"
+	"strconv"
 	"time"
 )
 
@@ -44,6 +45,12 @@ type parsedConfigs struct {
 	stageRateLimiter    *ratelimiter.RateLimiter
 	timeout             time.Duration
 	logger              logging.Logger
+	initStageConfig     *parsedInitStageConfigs
+}
+
+type parsedInitStageConfigs struct {
+	timeout time.Duration
+	logger  logging.Logger
 }
 
 // Start starts the pipeline if it was created with the delayed manual start.
@@ -139,6 +146,11 @@ func FromChannel[T any](fromCh <-chan T, confs ...configs.PipelineConfig) *Pipel
 // If the limit is reached, then the pipeline will wait until the number of goroutines is decreased.
 //
 // The [configs.PipelineConfig.Timeout] config can be used to set the timeout for the pipeline.
+//
+// Use [configs.PipelineConfig.Logger] to set the logger for the pipeline.
+//
+// The [configs.PipelineConfig.InitStageConfig] config can be used to configure the initial stage.
+// See [configs.StageConfig] for more details.
 func from[T any](pipelineInitFunc func(chan<- T), confs ...configs.PipelineConfig) *Pipeline[T] {
 	initChan := make(chan T)
 	pipelineStatusChan := make(chan statuses.Status)
@@ -151,9 +163,9 @@ func from[T any](pipelineInitFunc func(chan<- T), confs ...configs.PipelineConfi
 	if starter != nil {
 		stageStarter = make(chan struct{})
 	}
-	logger := pc.logger
+	pipelineLogger := pc.logger
 
-	logger.Debug("Pipeline: initiating...")
+	pipelineLogger.Debug("Pipeline: initiating...")
 
 	var status statuses.Status
 	if starter == nil {
@@ -165,7 +177,7 @@ func from[T any](pipelineInitFunc func(chan<- T), confs ...configs.PipelineConfi
 	p := &Pipeline[T]{
 		InitStage: stages.NewInitStage(
 			initChan, pc.pipelineRateLimiter, pc.stageRateLimiter, stageStarter,
-			ctx, ctxCancelFunc, pipelineStatusChan, logger,
+			ctx, ctxCancelFunc, pipelineStatusChan, pipelineLogger,
 		),
 		Status:        status,
 		rateLimiter:   pc.pipelineRateLimiter,
@@ -173,39 +185,69 @@ func from[T any](pipelineInitFunc func(chan<- T), confs ...configs.PipelineConfi
 		ctx:           ctx,
 		ctxCancelFunc: ctxCancelFunc,
 		statusChan:    pipelineStatusChan,
-		logger:        logger,
+		logger:        pipelineLogger,
 	}
 
 	go p.listenToStatusUpdates()
+
+	localLogger, pipelineSpecific := localLogger(pipelineLogger, confs...)
+	if pipelineSpecific {
+		defer localLogger.Close()
+	}
+	localTimeout := localTimeout(confs...)
+
+	var stageIdAsString string
+	customStageId := customStageId(confs...)
+	if customStageId != 0 {
+		stageIdAsString = "stage " + strconv.FormatInt(customStageId, 10) + ": "
+	} else {
+		stageIdAsString = "stage " + strconv.FormatInt(stages.InitStageId, 10) + ": "
+	}
 
 	go func() {
 		defer close(initChan)
 
 		if starter != nil {
-			logger.Debug("Pipeline: waiting for the start signal...")
+			pipelineLogger.Debug("Pipeline: waiting for the start signal...")
+			localLogger.Debug(stageIdAsString + "waiting for the start signal...")
 
 			select {
 			case _, ok := <-starter:
 				if ok {
-					logger.Debug("Pipeline: start signal received")
+					pipelineLogger.Debug("Pipeline: start signal received")
+					localLogger.Debug(stageIdAsString + "start signal received")
 					stageStarter <- struct{}{}
 					close(starter)
 				}
 			case <-ctx.Done():
-				logger.Debug("Pipeline: interrupted before the start signal")
+				pipelineLogger.Debug("Pipeline: interrupted before the start signal")
+				localLogger.Debug(stageIdAsString + "context done signal received before the start signal")
 				// if the pipeline is interrupted before it is started, then return
 				close(starter)
 				return
 			}
 		}
 
-		logger.Info("Pipeline: started")
-		logger.Info("Stage 1: started")
+		pipelineLogger.Info("Pipeline: started")
+		localLogger.Info(stageIdAsString + "started")
 
+		// start pipeline timeout if configured
 		go func() {
 			if pc.timeout > 0 {
 				p.timeoutTimer = time.AfterFunc(pc.timeout, func() {
-					logger.Info("Pipeline: timeout reached for pipeline - interrupting the pipeline")
+					pipelineLogger.Info("Pipeline: timeout reached for pipeline - interrupting the pipeline")
+					ctxCancelFunc()
+					pipelineStatusChan <- statuses.TimedOut
+				})
+			}
+		}()
+
+		// start stage timeout if configured
+		var stageTimeoutTimer *time.Timer
+		go func() {
+			if localTimeout > 0 {
+				stageTimeoutTimer = time.AfterFunc(localTimeout, func() {
+					localLogger.Info(stageIdAsString + "timeout reached for stage - interrupting the pipeline" + stageIdAsString + " - interrupting the pipeline")
 					ctxCancelFunc()
 					pipelineStatusChan <- statuses.TimedOut
 				})
@@ -213,7 +255,9 @@ func from[T any](pipelineInitFunc func(chan<- T), confs ...configs.PipelineConfi
 		}()
 
 		pipelineInitFunc(initChan)
-		logger.Info("Stage 1: finished")
+
+		utils.StopSafely(stageTimeoutTimer)
+		localLogger.Info(stageIdAsString + "finished")
 	}()
 
 	return p
@@ -225,6 +269,7 @@ func parseConfigs(confs ...configs.PipelineConfig) *parsedConfigs {
 	var stageRateLimiter *ratelimiter.RateLimiter
 	var timeout time.Duration
 	var logger logging.Logger
+	var parsedInitStageConf *parsedInitStageConfigs
 
 	if len(confs) > 0 {
 		conf := confs[0]
@@ -243,6 +288,18 @@ func parseConfigs(confs ...configs.PipelineConfig) *parsedConfigs {
 		if conf.Logger != nil {
 			logger = conf.Logger
 		}
+
+		initStageConf := conf.InitStageConfig
+		if initStageConf != nil {
+			parsedInitStageConf = &parsedInitStageConfigs{}
+
+			if initStageConf.Timeout > 0 {
+				parsedInitStageConf.timeout = initStageConf.Timeout
+			}
+			if initStageConf.Logger != nil {
+				parsedInitStageConf.logger = initStageConf.Logger
+			}
+		}
 	}
 
 	if logger == nil {
@@ -255,5 +312,44 @@ func parseConfigs(confs ...configs.PipelineConfig) *parsedConfigs {
 		stageRateLimiter:    stageRateLimiter,
 		timeout:             timeout,
 		logger:              logger,
+		initStageConfig:     parsedInitStageConf,
 	}
+}
+
+func localLogger(pipelineLogger logging.Logger, confs ...configs.PipelineConfig) (logging.Logger, bool) {
+	if len(confs) == 0 {
+		return pipelineLogger, false
+	}
+
+	conf := confs[0].InitStageConfig
+	if conf != nil && conf.Logger != nil {
+		// stage configs overrides pipeline configs for logger
+		return conf.Logger, true
+	}
+	return pipelineLogger, false
+}
+
+func localTimeout(confs ...configs.PipelineConfig) time.Duration {
+	if len(confs) == 0 {
+		return 0
+	}
+
+	conf := confs[0].InitStageConfig
+	if conf != nil {
+		// stage configs overrides pipeline configs for timeout
+		return conf.Timeout
+	}
+	return 0
+}
+
+func customStageId(confs ...configs.PipelineConfig) int64 {
+	if len(confs) == 0 {
+		return 0
+	}
+
+	conf := confs[0].InitStageConfig
+	if conf != nil {
+		return conf.CustomId
+	}
+	return 0
 }
