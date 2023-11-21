@@ -97,20 +97,26 @@ func (p *Pipeline[A]) listenToStatusUpdates() {
 }
 
 // FromSlice creates a pipeline from a slice.
+// ctx param is used to interrupt the execution if the pipeline is interrupted.
 func FromSlice[T any](s []T, confs ...configs.PipelineConfig) *Pipeline[T] {
-	return from(func(ch chan<- T) {
-		// TODO: not possible to interrupt the pipeline if the slice is not iterated over
+	return from(func(ch chan<- T, ctx context.Context) {
 		for _, e := range s {
+			if ctx.Err() != nil {
+				return
+			}
 			ch <- e
 		}
 	}, confs...)
 }
 
 // FromMap creates a pipeline from a map.
+// ctx param is used to interrupt the execution if the pipeline is interrupted.
 func FromMap[K comparable, V any](m map[K]V, confs ...configs.PipelineConfig) *Pipeline[types.Tuple[K, V]] {
-	return from(func(ch chan<- types.Tuple[K, V]) {
-		// TODO: not possible to interrupt the pipeline if the map is not iterated over
+	return from(func(ch chan<- types.Tuple[K, V], ctx context.Context) {
 		for k, v := range m {
+			if ctx.Err() != nil {
+				return
+			}
 			ch <- types.Tuple[K, V]{First: k, Second: v}
 		}
 	}, confs...)
@@ -120,12 +126,24 @@ func FromMap[K comparable, V any](m map[K]V, confs ...configs.PipelineConfig) *P
 // The elements from the channel will be sent to the pipeline exactly once.
 // The function keeps reading from the channel until it is closed.
 // Since it's an external channel, make sure to close it once it is not needed anymore, as otherwise the pipeline won't be finished.
+//
+// ctx param is used to interrupt the execution if the pipeline is interrupted.
 func FromChannel[T any](fromCh <-chan T, confs ...configs.PipelineConfig) *Pipeline[T] {
-	return from(func(ch chan<- T) {
-		// TODO: not possible to interrupt the pipeline if the channel is not closed
-		for e := range fromCh {
-			ch <- e
+	return from(func(ch chan<- T, ctx context.Context) {
+		running := true
+		for running {
+			select {
+			case e, ok := <-fromCh:
+				if ok {
+					ch <- e
+				} else {
+					running = false
+				}
+			case <-ctx.Done():
+				return
+			}
 		}
+
 	}, confs...)
 
 }
@@ -151,7 +169,7 @@ func FromChannel[T any](fromCh <-chan T, confs ...configs.PipelineConfig) *Pipel
 //
 // The [configs.PipelineConfig.InitStageConfig] config can be used to configure the initial stage.
 // See [configs.StageConfig] for more details.
-func from[T any](pipelineInitFunc func(chan<- T), confs ...configs.PipelineConfig) *Pipeline[T] {
+func from[T any](pipelineInitFunc func(chan<- T, context.Context), confs ...configs.PipelineConfig) *Pipeline[T] {
 	initChan := make(chan T)
 	pipelineStatusChan := make(chan statuses.Status)
 	ctx, ctxCancelFunc := context.WithCancel(context.Background())
@@ -174,11 +192,12 @@ func from[T any](pipelineInitFunc func(chan<- T), confs ...configs.PipelineConfi
 		status = statuses.Pending
 	}
 
+	initStage := stages.NewInitStage(
+		initChan, pc.pipelineRateLimiter, pc.stageRateLimiter, stageStarter,
+		ctx, ctxCancelFunc, pipelineStatusChan, pipelineLogger,
+	)
 	p := &Pipeline[T]{
-		InitStage: stages.NewInitStage(
-			initChan, pc.pipelineRateLimiter, pc.stageRateLimiter, stageStarter,
-			ctx, ctxCancelFunc, pipelineStatusChan, pipelineLogger,
-		),
+		InitStage:     initStage,
 		Status:        status,
 		rateLimiter:   pc.pipelineRateLimiter,
 		starter:       starter,
@@ -254,7 +273,10 @@ func from[T any](pipelineInitFunc func(chan<- T), confs ...configs.PipelineConfi
 			}
 		}()
 
-		pipelineInitFunc(initChan)
+		initFuncCtx, initFuncCancelFunc := context.WithCancel(initStage.Context())
+		defer initFuncCancelFunc()
+
+		pipelineInitFunc(initChan, initFuncCtx)
 
 		utils.StopSafely(stageTimeoutTimer)
 		localLogger.Info(stageIdAsString + "finished")
